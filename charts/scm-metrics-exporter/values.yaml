@@ -60,6 +60,13 @@ securityContext:
   seccompProfile:
     type: RuntimeDefault
 
+# extraEnv, extraVolumes and extraVolumeMounts are added to the operator container, which
+# calls the SCM API for discovery. Set the same on the CR (spec.env, spec.volumes,
+# spec.volumeMounts) for the collection Jobs, for example to trust a private CA.
+extraEnv: []
+extraVolumes: []
+extraVolumeMounts: []
+
 nodeSelector: {}
 tolerations: []
 affinity: {}

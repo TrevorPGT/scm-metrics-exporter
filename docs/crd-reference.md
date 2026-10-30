@@ -18,6 +18,9 @@ These fields are present on both `GitHubMetricsExporter` and `GitLabMetricsExpor
 | `rateLimitThreshold` | integer | `200` | Pause dispatching new collection Jobs when the credential's remaining API budget falls below this floor, resuming after the provider's rate-limit window resets. `0` disables the guard. See [Rate-limit handling](#rate-limit-handling). |
 | `image` | string | (operator image) | Override the collection-Job container image. |
 | `resources` | ResourceRequirements | none | Collection-Job container compute resources. |
+| `volumes` | `[]Volume` | none | Added to the collection-Job pods, after any the operator sets (the GitHub App key). For example a Secret or ConfigMap holding a private CA. See [Trust a private CA](how-to-trust-a-private-ca.md). |
+| `volumeMounts` | `[]VolumeMount` | none | Added to the collection-Job container. |
+| `env` | `[]EnvVar` | none | Added to the collection-Job container after the operator's own variables, so a CR entry overrides an operator-set variable of the same name. |
 | `export.otlpEndpoint` | string | (required) | OTLP metrics endpoint the Jobs push to. Ephemeral Jobs cannot be scraped, so this is mandatory. |
 | `autoDiscover.include` | RepoFilter | (empty = all) | Candidate repositories to collect. |
 | `autoDiscover.exclude` | RepoFilter | (empty = none) | Repositories removed from the include set. |

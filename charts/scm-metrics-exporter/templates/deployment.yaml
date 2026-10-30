@@ -44,6 +44,9 @@ spec:
           env:
             - name: EXPORTER_IMAGE
               value: {{ include "scm-metrics-exporter.exporterImage" . | quote }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           ports:
             - name: metrics
               containerPort: {{ .Values.metrics.port }}
@@ -71,6 +74,9 @@ spec:
             - name: webhook-cert
               mountPath: /tmp/k8s-webhook-server/serving-certs
               readOnly: true
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
       volumes:
         # cert-manager issues this Secret. Non-optional on purpose: the pod waits for the
         # cert before starting, so the operator's startup cert check always sees it and
@@ -79,6 +85,9 @@ spec:
           secret:
             secretName: {{ include "scm-metrics-exporter.fullname" . }}-webhook-cert
             defaultMode: 420
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
