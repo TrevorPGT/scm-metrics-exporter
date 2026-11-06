@@ -182,6 +182,7 @@ Useful values (see `charts/scm-metrics-exporter/values.yaml` for the full set):
 | `metrics.bindAddress` | `:8080` | Operator's own controller-runtime metrics port (set `0` to disable the endpoint). |
 | `operator.serviceMonitor.enabled` | `true` | Create a Prometheus Operator ServiceMonitor (plus a metrics Service) for the operator's metrics. Renders only when the `monitoring.coreos.com/v1` CRD is present, so it is a no-op on clusters without Prometheus Operator. |
 | `watchNamespaces` | (all) | Reserved for namespaced mode. |
+| `extraEnv` / `extraVolumes` / `extraVolumeMounts` | `[]` | Added to the operator container, which calls the SCM API for discovery. The CR's `env`, `volumes` and `volumeMounts` do the same for the collection Jobs; see [Trust a private CA](docs/how-to-trust-a-private-ca.md). |
 
 ## Custom resource examples
 
@@ -372,6 +373,7 @@ After changing API types or RBAC markers, run `mise run generate manifests` and
 
 - [CRD reference](docs/crd-reference.md) -- every spec field, default, and validation rule.
 - [Enable remediation-time (MTTR) metrics](docs/how-to-enable-mttr.md) -- provision Valkey, turn on `collectLifecycle`, verify, and query MTTR.
+- [Trust a private CA](docs/how-to-trust-a-private-ca.md) -- collect from a GitHub Enterprise or GitLab instance whose certificate a private CA issued.
 - [Operator runbook](docs/runbook.md) -- deploy, rotate credentials, Valkey operations, upgrade CRDs, cut a release.
 
 ## License

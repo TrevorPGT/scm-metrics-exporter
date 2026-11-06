@@ -113,6 +113,52 @@ func TestGitLabReconcileDispatchesJobs(t *testing.T) {
 	}
 }
 
+// TestGitLabReconcileJobsCarryCRVolumesAndEnv round-trips spec.volumes, volumeMounts and env
+// through the API server, so a schema that pruned them would fail here.
+func TestGitLabReconcileJobsCarryCRVolumesAndEnv(t *testing.T) {
+	ctx := context.Background()
+	ns := createNamespace(t)
+	createSecret(t, ns, "gl-creds", map[string][]byte{"token": []byte("glpat")})
+
+	cr := &scmv1alpha1.GitLabMetricsExporter{
+		ObjectMeta: metav1.ObjectMeta{Name: "gl-ca", Namespace: ns},
+		Spec: scmv1alpha1.GitLabMetricsExporterSpec{
+			ExporterSpec: scmv1alpha1.ExporterSpec{
+				Export:            scmv1alpha1.ExportConfig{OTLPEndpoint: testOTLPEndpoint},
+				CredentialsSecret: corev1.LocalObjectReference{Name: "gl-creds"},
+				Volumes: []corev1.Volume{{
+					Name:         "private-ca",
+					VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "root-ca"}},
+				}},
+				VolumeMounts: []corev1.VolumeMount{{Name: "private-ca", MountPath: "/etc/scm/ca", ReadOnly: true}},
+				Env:          []corev1.EnvVar{{Name: "SSL_CERT_DIR", Value: "/etc/ssl/certs:/etc/scm/ca"}},
+			},
+			Group:    "acme",
+			TokenKey: "token",
+		},
+	}
+	if err := k8sClient.Create(ctx, cr); err != nil {
+		t.Fatalf("create cr: %v", err)
+	}
+	reconcileGitLab(t, newGitLabReconciler("acme/svc-a"), "gl-ca", ns)
+
+	jobs := listJobs(t, ns, "gl-ca")
+	if len(jobs) != 1 {
+		t.Fatalf("dispatched %d jobs, want 1", len(jobs))
+	}
+	pod := jobs[0].Spec.Template.Spec
+	if len(pod.Volumes) != 1 || pod.Volumes[0].Secret == nil || pod.Volumes[0].Secret.SecretName != "root-ca" {
+		t.Errorf("pod volumes = %+v, want the root-ca Secret", pod.Volumes)
+	}
+	c := pod.Containers[0]
+	if len(c.VolumeMounts) != 1 || c.VolumeMounts[0].MountPath != "/etc/scm/ca" {
+		t.Errorf("container mounts = %+v, want /etc/scm/ca", c.VolumeMounts)
+	}
+	if e, ok := getEnv(c.Env, "SSL_CERT_DIR"); !ok || e.Value != "/etc/ssl/certs:/etc/scm/ca" {
+		t.Errorf("SSL_CERT_DIR = %+v, ok=%v", e, ok)
+	}
+}
+
 func TestGitLabReconcileMissingSecretSetsCondition(t *testing.T) {
 	ctx := context.Background()
 	ns := createNamespace(t)

@@ -28,6 +28,15 @@
                 }
             }
         },
+        "extraEnv": {
+            "type": "array"
+        },
+        "extraVolumeMounts": {
+            "type": "array"
+        },
+        "extraVolumes": {
+            "type": "array"
+        },
         "fullnameOverride": {
             "type": "string"
         },

@@ -71,3 +71,83 @@ func TestGithubEnvLifecycleValkeySecretRef(t *testing.T) {
 		t.Fatalf("VALKEY_PASSWORD secretKeyRef.Key = %q, want password (default)", e.ValueFrom.SecretKeyRef.Key)
 	}
 }
+
+// TestGitlabJobExtraVolumesAndEnv covers the private-CA case: the CR's volumes, mounts and
+// env reach the collection Job, and the CR's env follows the operator's so it can override.
+func TestGitlabJobExtraVolumesAndEnv(t *testing.T) {
+	caVolume := corev1.Volume{
+		Name:         "private-ca",
+		VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "root-ca"}},
+	}
+	caMount := corev1.VolumeMount{Name: "private-ca", MountPath: "/etc/scm/ca", ReadOnly: true}
+	cr := &scmv1alpha1.GitLabMetricsExporter{
+		ObjectMeta: metav1.ObjectMeta{Name: "gl", Namespace: "ns"},
+		Spec: scmv1alpha1.GitLabMetricsExporterSpec{
+			ExporterSpec: scmv1alpha1.ExporterSpec{
+				Export:            scmv1alpha1.ExportConfig{OTLPEndpoint: "http://otel:4318"},
+				CredentialsSecret: corev1.LocalObjectReference{Name: "creds"},
+				Volumes:           []corev1.Volume{caVolume},
+				VolumeMounts:      []corev1.VolumeMount{caMount},
+				Env: []corev1.EnvVar{
+					{Name: "SSL_CERT_DIR", Value: "/etc/ssl/certs:/etc/scm/ca"},
+					{Name: "OTEL_METRICS_EXPORTER", Value: "none"},
+				},
+			},
+			TargetType: "group", Group: "acme", TokenKey: "token",
+		},
+	}
+
+	job := gitlabJob(cr, "img", "acme/repo")
+	pod := job.Spec.Template.Spec
+	if len(pod.Volumes) != 1 || pod.Volumes[0].Name != "private-ca" {
+		t.Fatalf("pod volumes = %+v, want [private-ca]", pod.Volumes)
+	}
+	container := pod.Containers[0]
+	if len(container.VolumeMounts) != 1 || container.VolumeMounts[0].MountPath != "/etc/scm/ca" {
+		t.Fatalf("container mounts = %+v, want one at /etc/scm/ca", container.VolumeMounts)
+	}
+	if e, ok := getEnv(container.Env, "SSL_CERT_DIR"); !ok || e.Value != "/etc/ssl/certs:/etc/scm/ca" {
+		t.Fatalf("SSL_CERT_DIR = %+v, ok=%v", e, ok)
+	}
+	if _, ok := getEnv(container.Env, "GITLAB_TOKEN"); !ok {
+		t.Fatalf("GITLAB_TOKEN missing from env: %+v", container.Env)
+	}
+	if last := container.Env[len(container.Env)-1]; last.Name != "OTEL_METRICS_EXPORTER" || last.Value != "none" {
+		t.Fatalf("last env = %+v, want the CR's OTEL_METRICS_EXPORTER override", last)
+	}
+}
+
+// TestGithubJobAppModeKeepsKeyVolume checks the CR's volumes sit beside the App key volume.
+func TestGithubJobAppModeKeepsKeyVolume(t *testing.T) {
+	cr := &scmv1alpha1.GitHubMetricsExporter{
+		ObjectMeta: metav1.ObjectMeta{Name: "gh", Namespace: "ns"},
+		Spec: scmv1alpha1.GitHubMetricsExporterSpec{
+			ExporterSpec: scmv1alpha1.ExporterSpec{
+				Export:            scmv1alpha1.ExportConfig{OTLPEndpoint: "http://otel:4318"},
+				CredentialsSecret: corev1.LocalObjectReference{Name: "creds"},
+				Volumes: []corev1.Volume{{
+					Name:         "private-ca",
+					VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: "root-ca"}}},
+				}},
+				VolumeMounts: []corev1.VolumeMount{{Name: "private-ca", MountPath: "/etc/scm/ca", ReadOnly: true}},
+			},
+			TargetType: "org", Org: "acme", AuthMode: "app",
+			AppID: 1, AppInstallationID: 2, AppPrivateKeyKey: "key",
+		},
+	}
+
+	pod := githubJob(cr, "img", "acme/repo").Spec.Template.Spec
+	var volumes []string
+	for _, v := range pod.Volumes {
+		volumes = append(volumes, v.Name)
+	}
+	if len(volumes) != 2 || volumes[0] != appKeyVolume || volumes[1] != "private-ca" {
+		t.Fatalf("pod volumes = %v, want [%s private-ca]", volumes, appKeyVolume)
+	}
+	if mounts := pod.Containers[0].VolumeMounts; len(mounts) != 2 {
+		t.Fatalf("container mounts = %+v, want the App key and private-ca", mounts)
+	}
+	if len(cr.Spec.Volumes) != 1 {
+		t.Fatalf("rendering mutated the CR: spec.volumes = %+v", cr.Spec.Volumes)
+	}
+}

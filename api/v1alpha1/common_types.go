@@ -44,6 +44,20 @@ type ExporterSpec struct {
 	// +optional
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 
+	// Volumes are added to the collection Job pods, for example a Secret or ConfigMap holding
+	// a private CA bundle. Mount them into the exporter container with VolumeMounts.
+	// +optional
+	Volumes []corev1.Volume `json:"volumes,omitempty"`
+
+	// VolumeMounts are added to the collection Job's exporter container.
+	// +optional
+	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
+
+	// Env is added to the collection Job's exporter container after the operator's own
+	// variables, for example SSL_CERT_DIR to trust a CA bundle mounted with VolumeMounts.
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
+
 	// Export configures how metrics leave the collection Jobs (OTLP push).
 	Export ExportConfig `json:"export"`
 

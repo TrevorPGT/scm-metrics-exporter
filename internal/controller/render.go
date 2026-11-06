@@ -79,13 +79,14 @@ type renderInput struct {
 	repo      string // bare repository name (the collection target)
 	image     string
 	provider  string // exporter --provider value
-	resources corev1.ResourceRequirements
+	spec      scmv1alpha1.ExporterSpec
 	env       []corev1.EnvVar
 	volumes   []corev1.Volume
 	mounts    []corev1.VolumeMount
 }
 
-// collectionJob renders the run-once, single-repo collection Job common to all providers.
+// collectionJob renders the run-once, single-repo Job; the CR's env comes last, so it
+// overrides an operator-set variable of the same name.
 func collectionJob(in renderInput) *batchv1.Job {
 	labels := selectorLabels(in.crName)
 	container := corev1.Container{
@@ -93,9 +94,9 @@ func collectionJob(in renderInput) *batchv1.Job {
 		Image:           in.image,
 		Command:         []string{"/exporter"},
 		Args:            []string{"--provider=" + in.provider, "--once", "--repo=" + in.repo},
-		Env:             in.env,
-		Resources:       in.resources,
-		VolumeMounts:    in.mounts,
+		Env:             append(in.env, in.spec.Env...),
+		Resources:       in.spec.Resources,
+		VolumeMounts:    append(in.mounts, in.spec.VolumeMounts...),
 		SecurityContext: restrictedContainerSecurityContext(),
 	}
 	return &batchv1.Job{
@@ -108,7 +109,7 @@ func collectionJob(in renderInput) *batchv1.Job {
 				Spec: corev1.PodSpec{
 					RestartPolicy:   corev1.RestartPolicyNever,
 					Containers:      []corev1.Container{container},
-					Volumes:         in.volumes,
+					Volumes:         append(in.volumes, in.spec.Volumes...),
 					SecurityContext: restrictedPodSecurityContext(),
 				},
 			},
@@ -159,7 +160,7 @@ func githubJob(cr *scmv1alpha1.GitHubMetricsExporter, image, repo string) *batch
 		repo:      repo,
 		image:     image,
 		provider:  "github",
-		resources: cr.Spec.Resources,
+		spec:      cr.Spec.ExporterSpec,
 		env:       githubEnv(cr),
 		volumes:   volumes,
 		mounts:    mounts,
@@ -223,7 +224,7 @@ func gitlabJob(cr *scmv1alpha1.GitLabMetricsExporter, image, repo string) *batch
 		repo:      repo,
 		image:     image,
 		provider:  "gitlab",
-		resources: cr.Spec.Resources,
+		spec:      cr.Spec.ExporterSpec,
 		env:       gitlabEnv(cr),
 	})
 }
